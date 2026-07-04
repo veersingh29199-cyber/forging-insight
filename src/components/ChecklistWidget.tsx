@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { CheckCircle2, Circle, ChevronDown, ChevronUp, Sparkles, AlertCircle } from 'lucide-react'
+import { useState } from 'react'
+import { CheckCircle2, Circle, ChevronDown, ChevronUp } from 'lucide-react'
 
 // ─────────────────────────────────────────
 // Section 7-7. 현장 적용 체크리스트 정의
@@ -85,23 +85,20 @@ const CHECKLIST_ITEMS: ChecklistItem[] = [
 
 export function ChecklistWidget() {
   const [isOpen, setIsOpen] = useState(false)
-  const [completedIds, setCompletedIds] = useState<string[]>([])
-
-  useEffect(() => {
+  const [completedIds, setCompletedIds] = useState<string[]>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('forging_checklist_completed')
       if (saved) {
         try {
-          setCompletedIds(JSON.parse(saved))
+          return JSON.parse(saved)
         } catch (e) {
           console.error('Failed to load checklist state', e)
         }
-      } else {
-        // 기본적으로 1, 2, 4번 완료 상태로 초기화 (체험용)
-        setCompletedIds(['chk_upload_line_output', 'chk_upload_gas', 'chk_settings_furnaces'])
       }
+      return ['chk_upload_line_output', 'chk_upload_gas', 'chk_settings_furnaces']
     }
-  }, [])
+    return ['chk_upload_line_output', 'chk_upload_gas', 'chk_settings_furnaces']
+  })
 
   const toggleItem = (id: string, e: React.MouseEvent) => {
     e.stopPropagation()

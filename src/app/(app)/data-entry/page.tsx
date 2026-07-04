@@ -52,6 +52,10 @@ const INITIAL_TARGETS: TargetData[] = [
   { id: 5, dept: 'R/M (링밀/자유)', year: 2026, target_ton: 2160, target_gas_mcal: 160, target_defect_rate: 2.0 },
 ]
 
+function generateOrderNo(): string {
+  return `ORD-MANUAL-${Date.now()}`
+}
+
 export default function DataEntryPage() {
   const [activeTab, setActiveTab] = useState<'standards' | 'targets' | 'manual'>('standards')
   const [standards, setStandards] = useState<WorkStandard[]>(INITIAL_WORK_STANDARDS)
@@ -110,7 +114,7 @@ export default function DataEntryPage() {
       workDate: manualRecord.date,
       dept: manualRecord.dept,
       shift: 'A',
-      orderNo: `ORD-MANUAL-${Date.now()}`,
+      orderNo: generateOrderNo(),
       product: '일반단조품',
       material: 'SCM440',
       orderWeightTon: manualRecord.orderWeight,

@@ -316,7 +316,7 @@ export default function SettingsPage() {
               <Award size={20} color="var(--color-primary)" /> 두산중공업 벤치마크 시간당 생산성 (t/h)
             </div>
             <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '1.5rem', lineHeight: 1.5 }}>
-              사장님 지시 분석 보고서에 사용되는 동종 업계 최고 수준(두산 기준) 생산성 지표입니다. 수정 시 생산량 심층 분석의 <strong>'두산 벤치마크 비교'</strong> 열 및 갭(t/h) 산출에 즉시 반영됩니다.
+              사장님 지시 분석 보고서에 사용되는 동종 업계 최고 수준(두산 기준) 생산성 지표입니다. 수정 시 생산량 심층 분석의 <strong>&apos;두산 벤치마크 비교&apos;</strong> 열 및 갭(t/h) 산출에 즉시 반영됩니다.
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>

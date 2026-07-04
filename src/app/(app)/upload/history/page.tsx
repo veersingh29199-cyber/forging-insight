@@ -15,7 +15,6 @@ export default function UploadHistoryPage() {
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
   const fetchHistory = useCallback(async () => {
-    setLoading(true)
     try {
       const data = await getUploadHistory()
       setHistory(data)
@@ -27,8 +26,14 @@ export default function UploadHistoryPage() {
   }, [])
 
   useEffect(() => {
-    fetchHistory()
-  }, [fetchHistory])
+    getUploadHistory().then((data) => {
+      setHistory(data)
+      setLoading(false)
+    }).catch((e) => {
+      console.error('history fetch error:', e)
+      setLoading(false)
+    })
+  }, [])
 
   async function handleRollback(id: number) {
     setRollingBack(true)
@@ -37,6 +42,7 @@ export default function UploadHistoryPage() {
       const res = await rollbackUpload(id)
       if (res.success) {
         setMessage({ text: res.message || '롤백이 완료되었습니다.', type: 'success' })
+        setLoading(true)
         await fetchHistory()
       } else {
         setMessage({ text: res.error || '롤백 실패', type: 'error' })
@@ -59,7 +65,7 @@ export default function UploadHistoryPage() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <button className="btn btn-outline" onClick={fetchHistory} disabled={loading} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <button className="btn btn-outline" onClick={() => { setLoading(true); fetchHistory(); }} disabled={loading} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> 새로고침
           </button>
           <a href="/upload" className="btn btn-primary" style={{ textDecoration: 'none' }}>
