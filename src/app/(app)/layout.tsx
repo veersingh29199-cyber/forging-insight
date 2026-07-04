@@ -26,6 +26,10 @@ const NAV_ITEMS = [
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
 
+  const isEnvMissing =
+    !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY && !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)
+
   return (
     <div className="app-layout">
       {/* 사이드바 */}
@@ -100,7 +104,34 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* 메인 컨텐츠 */}
-      <main className="main-content">{children}</main>
+      <main className="main-content">
+        {isEnvMissing && (
+          <div
+            style={{
+              background: 'rgba(239, 68, 68, 0.15)',
+              border: '1px solid var(--color-danger)',
+              borderRadius: 'var(--radius-md)',
+              padding: '1rem 1.25rem',
+              marginBottom: '1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              color: 'var(--color-danger)',
+            }}
+          >
+            <div style={{ fontSize: '1.25rem' }}>⚠️</div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>
+                Supabase 연결 환경변수가 설정되지 않았습니다!
+              </div>
+              <div style={{ fontSize: '0.8rem', opacity: 0.9, marginTop: '0.2rem' }}>
+                Vercel 또는 로컬 <code>.env.local</code> 파일에 <code>NEXT_PUBLIC_SUPABASE_URL</code> 및 <code>NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY</code>를 설정해주세요. 현재 데이터베이스 조회 및 업로드가 제한될 수 있습니다.
+              </div>
+            </div>
+          </div>
+        )}
+        {children}
+      </main>
     </div>
   )
 }
