@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Save, Check, Plus, Trash2, Settings as SettingsIcon, Factory, Flame, Clock, Database, Award } from 'lucide-react'
+import { Save, Check, Plus, Trash2, Settings as SettingsIcon, Factory, Flame, Clock, Database, Award, Lock, Unlock, ShieldAlert } from 'lucide-react'
 import { ChecklistWidget } from '@/components/ChecklistWidget'
 
 // ─────────────────────────────────────────
@@ -66,6 +66,7 @@ export default function SettingsPage() {
   const [equipments, setEquipments] = useState<EquipmentMapping[]>(INITIAL_EQUIPMENT)
   const [rawSpecs, setRawSpecs] = useState<RawMaterialSpec[]>(INITIAL_RAW_SPECS)
   const [saveSuccess, setSaveSuccess] = useState(false)
+  const [isAdminUnlocked, setIsAdminUnlocked] = useState(false)
 
   // 가동시간 및 교대 기준값
   const [shiftConfig, setShiftConfig] = useState({
@@ -96,21 +97,34 @@ export default function SettingsPage() {
   })
 
   const triggerSaveMessage = () => {
+    if (!isAdminUnlocked) {
+      alert('🔒 관리자 모드가 잠금되어 있어 설정을 저장할 수 없습니다.\n상단의 [⚙️ 관리자 모드 잠금 해제] 버튼을 눌러주세요.')
+      return
+    }
     setSaveSuccess(true)
     setTimeout(() => setSaveSuccess(false), 3000)
   }
 
   const handleToggleBatch = (id: number) => {
+    if (!isAdminUnlocked) {
+      alert('🔒 관리자 권한이 필요합니다. 상단의 [관리자 모드 잠금 해제]를 활성화해주세요.')
+      return
+    }
     setEquipments(equipments.map((e) => (e.id === id ? { ...e, is_batch: !e.is_batch } : e)))
     triggerSaveMessage()
   }
 
   const handleDeptChange = (id: number, newDept: string) => {
+    if (!isAdminUnlocked) return
     setEquipments(equipments.map((e) => (e.id === id ? { ...e, dept: newDept } : e)))
     triggerSaveMessage()
   }
 
   const handleAddSpec = () => {
+    if (!isAdminUnlocked) {
+      alert('🔒 관리자 권한이 필요합니다. 상단의 [관리자 모드 잠금 해제]를 활성화해주세요.')
+      return
+    }
     if (!newSpec.product || !newSpec.raw_material) {
       alert('제품명과 원소재명을 입력해주세요.')
       return
@@ -122,6 +136,10 @@ export default function SettingsPage() {
   }
 
   const handleDeleteSpec = (id: number) => {
+    if (!isAdminUnlocked) {
+      alert('🔒 관리자 권한이 필요합니다. 상단의 [관리자 모드 잠금 해제]를 활성화해주세요.')
+      return
+    }
     if (confirm('해당 원소재 규격 마스터를 삭제하시겠습니까?')) {
       setRawSpecs(rawSpecs.filter((s) => s.id !== id))
       triggerSaveMessage()
@@ -147,6 +165,45 @@ export default function SettingsPage() {
             <Save size={16} /> 설정 전체 저장
           </button>
         </div>
+      </div>
+
+      {/* 관리자 전용 권한 잠금 배너 */}
+      <div
+        style={{
+          background: isAdminUnlocked ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.1)',
+          border: `1px solid ${isAdminUnlocked ? 'var(--color-success)' : 'var(--color-accent)'}`,
+          borderRadius: 'var(--radius-md)',
+          padding: '1.25rem',
+          marginBottom: '2rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '1rem',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+          {isAdminUnlocked ? <Unlock size={24} color="var(--color-success)" /> : <Lock size={24} color="var(--color-accent)" />}
+          <div>
+            <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--color-text)' }}>
+              {isAdminUnlocked ? '⚙️ 관리자 수정 모드 활성화 중' : '🔒 관리자 전용 공정·설비 기준 설정 (읽기 전용)'}
+            </div>
+            <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginTop: '0.2rem' }}>
+              {isAdminUnlocked
+                ? '호기 매핑, 벤치마크, 교대 근무 기준을 자유롭게 수정 및 저장할 수 있습니다. 작업 완료 후 잠금을 권장합니다.'
+                : '공정 및 설비 기준 변경은 공장 KPI 지표 및 원단위 산출식에 직접 영향을 미치므로 일반 현장 담당자는 조회만 가능합니다.'}
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsAdminUnlocked(!isAdminUnlocked)}
+          className={`btn ${isAdminUnlocked ? 'btn-outline' : 'btn-primary'}`}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700, whiteSpace: 'nowrap' }}
+        >
+          {isAdminUnlocked ? <Lock size={16} /> : <Unlock size={16} />}
+          {isAdminUnlocked ? '관리자 모드 잠금 (읽기 전용)' : '⚙️ 관리자 모드 잠금 해제'}
+        </button>
       </div>
 
       {/* 체크리스트 위젯 */}
@@ -242,7 +299,7 @@ export default function SettingsPage() {
 
       {/* 탭 1: 호기 매핑 & 로방식 */}
       {activeTab === 'equip' && (
-        <div className="animate-in">
+        <div className="animate-in" style={{ opacity: !isAdminUnlocked ? 0.75 : 1, pointerEvents: !isAdminUnlocked ? 'none' : 'auto', transition: 'opacity 0.2s' }}>
           <div className="kpi-card" style={{ padding: '1.75rem' }}>
             <div style={{ fontWeight: 800, fontSize: '1.1rem', marginBottom: '0.5rem', color: 'var(--color-text)' }}>
               🔥 1호기 ~ 20호기 부서 매핑 및 로방식(배치로 vs 대차로) 설정
@@ -309,7 +366,7 @@ export default function SettingsPage() {
 
       {/* 탭 2: 두산 벤치마크 & 가스 원단위 기준 */}
       {activeTab === 'benchmarks' && (
-        <div className="animate-in grid-2">
+        <div className="animate-in grid-2" style={{ opacity: !isAdminUnlocked ? 0.75 : 1, pointerEvents: !isAdminUnlocked ? 'none' : 'auto', transition: 'opacity 0.2s' }}>
           {/* 두산 벤치마크 설정 */}
           <div className="kpi-card" style={{ padding: '1.75rem' }}>
             <div style={{ fontWeight: 800, fontSize: '1.1rem', marginBottom: '0.5rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -440,7 +497,7 @@ export default function SettingsPage() {
 
       {/* 탭 3: 가동시간 / 교대 근무 기준 */}
       {activeTab === 'shift' && (
-        <div className="animate-in">
+        <div className="animate-in" style={{ opacity: !isAdminUnlocked ? 0.75 : 1, pointerEvents: !isAdminUnlocked ? 'none' : 'auto', transition: 'opacity 0.2s' }}>
           <div className="kpi-card" style={{ padding: '2rem', maxWidth: '700px', margin: '0 auto' }}>
             <div style={{ fontWeight: 800, fontSize: '1.2rem', marginBottom: '0.5rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Clock size={20} color="var(--color-primary)" /> 일일 표준 가동시간 및 교대제 설정
@@ -508,7 +565,7 @@ export default function SettingsPage() {
 
       {/* 탭 4: 원소재 규격 (몰드표) 마스터 */}
       {activeTab === 'raw_specs' && (
-        <div className="animate-in">
+        <div className="animate-in" style={{ opacity: !isAdminUnlocked ? 0.75 : 1, pointerEvents: !isAdminUnlocked ? 'none' : 'auto', transition: 'opacity 0.2s' }}>
           <div className="kpi-card" style={{ padding: '1.75rem', marginBottom: '2rem' }}>
             <div style={{ fontWeight: 800, fontSize: '1.1rem', marginBottom: '0.5rem', color: 'var(--color-text)' }}>
               📦 원소재 규격 (몰드표) 마스터 테이블

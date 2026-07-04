@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { TrendingUp, TrendingDown, Flame, Factory, AlertTriangle, CheckCircle2, RefreshCw, HelpCircle, ArrowRight, Download, Printer, Filter } from 'lucide-react'
+import { TrendingUp, TrendingDown, Flame, Factory, AlertTriangle, CheckCircle2, RefreshCw, HelpCircle, ArrowRight, Download, Printer, Filter, ChevronDown, ChevronUp } from 'lucide-react'
 import { ChecklistWidget } from '@/components/ChecklistWidget'
 import { ShopfloorToggle } from '@/components/ShopfloorToggle'
 import { DrilldownModal } from '@/components/DrilldownModal'
+import { InfoTooltip } from '@/components/common/InfoTooltip'
 import { getDashboardKPIs, type DashboardKPIs } from '@/app/actions/data-actions'
 import { exportDashboardReportToExcel, printDashboardReport } from '@/lib/export/report'
 
@@ -91,6 +92,7 @@ export default function DashboardPage() {
   const [filterFurnace, setFilterFurnace] = useState('전체')
   const [filterYear, setFilterYear] = useState(2026)
   const [drilldownOpen, setDrilldownOpen] = useState(false)
+  const [showSecondaryKpis, setShowSecondaryKpis] = useState(false)
 
   const fetchKpis = useCallback((year: number) => {
     getDashboardKPIs(year).then((data) => {
@@ -336,9 +338,9 @@ export default function DashboardPage() {
         </>
       )}
 
-      {/* 5대 KPI 카드 그리드 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem', marginBottom: '2.5rem' }}>
-        {displayKpis.map((kpi) => {
+      {/* 핵심 3대 KPI 카드 그리드 */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem', marginBottom: '1.25rem' }}>
+        {displayKpis.slice(0, 3).map((kpi) => {
           const Icon = kpi.icon
           const positive = kpi.trend < 0
             ? kpi.label.includes('원단위') || kpi.label.includes('비가동') || kpi.label.includes('불량') || kpi.label.includes('재가열')
@@ -347,23 +349,22 @@ export default function DashboardPage() {
           return (
             <div
               key={kpi.label}
-              className="kpi-card formula-tooltip"
-              data-formula={kpi.formula}
-              style={{ position: 'relative', cursor: 'help' }}
+              className="kpi-card"
+              style={{ position: 'relative', borderTop: `4px solid ${kpi.color}` }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                 <div
                   style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 10,
-                    background: `${kpi.color}22`,
+                    width: 44,
+                    height: 44,
+                    borderRadius: 12,
+                    background: `${kpi.color}18`,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}
                 >
-                  <Icon size={20} color={kpi.color} />
+                  <Icon size={22} color={kpi.color} />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <span
@@ -371,33 +372,110 @@ export default function DashboardPage() {
                       display: 'flex',
                       alignItems: 'center',
                       gap: 4,
-                      fontSize: '0.8rem',
+                      fontSize: '0.82rem',
                       color: positive ? 'var(--color-success)' : 'var(--color-danger)',
                       fontWeight: 700,
-                      background: positive ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
-                      padding: '0.2rem 0.5rem',
+                      background: positive ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
+                      padding: '0.25rem 0.6rem',
                       borderRadius: '999px',
                     }}
                   >
                     {positive ? <TrendingDown size={14} /> : <TrendingUp size={14} />}
                     {Math.abs(kpi.trend).toFixed(1)}%
                   </span>
-                  <HelpCircle size={15} color="var(--color-text-dim)" />
+                  <InfoTooltip customInfo={{ title: kpi.label, definition: kpi.sub, formula: kpi.formula }} size={18} />
                 </div>
               </div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '0.35rem', fontWeight: 600 }}>
+              <div style={{ fontSize: '0.88rem', color: 'var(--color-text-muted)', marginBottom: '0.35rem', fontWeight: 700 }}>
                 {kpi.label}
               </div>
-              <div style={{ fontSize: '1.65rem', fontWeight: 800, color: 'var(--color-text)', marginBottom: '0.35rem', letterSpacing: '-0.5px' }}>
+              <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-text)', marginBottom: '0.35rem', letterSpacing: '-0.5px' }}>
                 {kpi.value}
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+              <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
                 {kpi.sub}
               </div>
             </div>
           )
         })}
       </div>
+
+      {/* 부가 KPI 접기/펼치기 토글 */}
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '2.5rem' }}>
+        <button
+          type="button"
+          onClick={() => setShowSecondaryKpis(!showSecondaryKpis)}
+          className="btn btn-outline"
+          style={{ padding: '0.45rem 1.25rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', borderRadius: '999px', background: 'var(--color-surface)' }}
+        >
+          {showSecondaryKpis ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          {showSecondaryKpis ? '부가 공정/품질 지표 접기' : '+ 부가 공정/품질 지표 (재가열 배수, 공정 불량률) 펼쳐보기'}
+        </button>
+      </div>
+
+      {/* 부가 2대 KPI 카드 그리드 */}
+      {showSecondaryKpis && (
+        <div className="animate-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem', marginBottom: '2.5rem' }}>
+          {displayKpis.slice(3).map((kpi) => {
+            const Icon = kpi.icon
+            const positive = kpi.trend < 0
+              ? kpi.label.includes('원단위') || kpi.label.includes('비가동') || kpi.label.includes('불량') || kpi.label.includes('재가열')
+              : !kpi.label.includes('원단위') && !kpi.label.includes('비가동') && !kpi.label.includes('불량') && !kpi.label.includes('재가열')
+
+            return (
+              <div
+                key={kpi.label}
+                className="kpi-card"
+                style={{ position: 'relative', borderTop: `4px solid ${kpi.color}`, background: 'var(--color-surface-2)' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                  <div
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 12,
+                      background: `${kpi.color}18`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Icon size={22} color={kpi.color} />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontSize: '0.82rem',
+                        color: positive ? 'var(--color-success)' : 'var(--color-danger)',
+                        fontWeight: 700,
+                        background: positive ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
+                        padding: '0.25rem 0.6rem',
+                        borderRadius: '999px',
+                      }}
+                    >
+                      {positive ? <TrendingDown size={14} /> : <TrendingUp size={14} />}
+                      {Math.abs(kpi.trend).toFixed(1)}%
+                    </span>
+                    <InfoTooltip customInfo={{ title: kpi.label, definition: kpi.sub, formula: kpi.formula }} size={18} />
+                  </div>
+                </div>
+                <div style={{ fontSize: '0.88rem', color: 'var(--color-text-muted)', marginBottom: '0.35rem', fontWeight: 700 }}>
+                  {kpi.label}
+                </div>
+                <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-text)', marginBottom: '0.35rem', letterSpacing: '-0.5px' }}>
+                  {kpi.value}
+                </div>
+                <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
+                  {kpi.sub}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* 부서별 현황 2단 그리드 */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2rem', marginBottom: '2rem' }}>
