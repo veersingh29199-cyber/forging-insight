@@ -9,20 +9,21 @@ import { Hammer } from 'lucide-react'
  * - localStorage에 상태 저장 (페이지 새로고침 후에도 유지)
  */
 export function ShopfloorToggle() {
-  const [active, setActive] = useState(false)
+  // 지연 초기화: 마운트 시 1회만 localStorage에서 읽음 (effect 내 setState 불필요)
+  const [active, setActive] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('shopfloor-mode') === 'true'
+  })
 
-  // 마운트 시 저장된 상태 복원
+  // active 값이 바뀔 때마다 body 클래스 동기화 (부수효과만 처리)
   useEffect(() => {
-    const saved = localStorage.getItem('shopfloor-mode') === 'true'
-    setActive(saved)
-    if (saved) document.body.classList.add('shopfloor-mode')
-  }, [])
+    document.body.classList.toggle('shopfloor-mode', active)
+  }, [active])
 
   const toggle = () => {
     const next = !active
     setActive(next)
     localStorage.setItem('shopfloor-mode', String(next))
-    document.body.classList.toggle('shopfloor-mode', next)
   }
 
   return (

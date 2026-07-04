@@ -39,9 +39,16 @@ export async function getDashboardKPIs(year = 2026, month?: number): Promise<Das
   if (month) targetQuery = targetQuery.eq('month', month)
   else targetQuery = targetQuery.is('month', null)
 
+  interface TargetRow { dept: string | null; target_ton: number | null; month: number | null }
+  interface ProdRow {
+    dept: string | null; order_weight_ton: number | null; charge_weight_ton: number | null
+    hwangji_weight_ton: number | null; gas_used_m3: number | null; work_count: number | null
+    created_at: string | null
+  }
+
   const { data: targetRowsRaw } = await targetQuery
-  const targetRows = (targetRowsRaw || []) as any[]
-  const totalTargetTon = targetRows.reduce((sum: number, r: any) => sum + Number(r.target_ton || 0), 0) || 14880
+  const targetRows = (targetRowsRaw || []) as TargetRow[]
+  const totalTargetTon = targetRows.reduce((sum: number, r: TargetRow) => sum + Number(r.target_ton || 0), 0) || 14880
 
   // 2. 생산 실적 조회
   let prodQuery = supabase.from('production_records').select('*')
@@ -54,14 +61,14 @@ export async function getDashboardKPIs(year = 2026, month?: number): Promise<Das
   }
 
   const { data: prodRowsRaw } = await prodQuery
-  const records = (prodRowsRaw || []) as any[]
+  const records = (prodRowsRaw || []) as ProdRow[]
 
   // 총 생산량 (황지 제외 보고용)
-  const totalOutputTon = records.reduce((sum: number, r: any) => sum + Number(r.order_weight_ton || 0), 0)
-  const totalChargeTon = records.reduce((sum: number, r: any) => sum + Number(r.charge_weight_ton || 0), 0)
-  const totalHwangjiTon = records.reduce((sum: number, r: any) => sum + Number(r.hwangji_weight_ton || 0), 0)
-  const totalGasM3 = records.reduce((sum: number, r: any) => sum + Number(r.gas_used_m3 || 0), 0)
-  const totalWorkCount = records.reduce((sum: number, r: any) => sum + Number(r.work_count || 1), 0)
+  const totalOutputTon = records.reduce((sum: number, r: ProdRow) => sum + Number(r.order_weight_ton || 0), 0)
+  const totalChargeTon = records.reduce((sum: number, r: ProdRow) => sum + Number(r.charge_weight_ton || 0), 0)
+  const totalHwangjiTon = records.reduce((sum: number, r: ProdRow) => sum + Number(r.hwangji_weight_ton || 0), 0)
+  const totalGasM3 = records.reduce((sum: number, r: ProdRow) => sum + Number(r.gas_used_m3 || 0), 0)
+  const totalWorkCount = records.reduce((sum: number, r: ProdRow) => sum + Number(r.work_count || 1), 0)
 
   // 달성률
   const achievementRate = totalTargetTon > 0 ? (totalOutputTon / totalTargetTon) * 100 : 0
@@ -100,11 +107,11 @@ export async function getDashboardKPIs(year = 2026, month?: number): Promise<Das
   // 부서별 통계
   const depts = ['P15 (1단조반)', 'P5 (2단조반)', 'P8 (3단조반)', 'R9 (4단조반)', 'R/M (링밀/자유)']
   const deptStats = depts.map((d) => {
-    const dRecords = records.filter((r: any) => r.dept?.includes(d.substring(0, 3)) || r.dept === d)
-    const dOutput = dRecords.reduce((sum: number, r: any) => sum + Number(r.order_weight_ton || 0), 0)
-    const dCharge = dRecords.reduce((sum: number, r: any) => sum + Number(r.charge_weight_ton || 0), 0)
-    const dGas = dRecords.reduce((sum: number, r: any) => sum + Number(r.gas_used_m3 || 0), 0)
-    const dTargetRow = targetRows.find((tr: any) => tr.dept?.includes(d.substring(0, 3)) || tr.dept === d)
+    const dRecords = records.filter((r: ProdRow) => r.dept?.includes(d.substring(0, 3)) || r.dept === d)
+    const dOutput = dRecords.reduce((sum: number, r: ProdRow) => sum + Number(r.order_weight_ton || 0), 0)
+    const dCharge = dRecords.reduce((sum: number, r: ProdRow) => sum + Number(r.charge_weight_ton || 0), 0)
+    const dGas = dRecords.reduce((sum: number, r: ProdRow) => sum + Number(r.gas_used_m3 || 0), 0)
+    const dTargetRow = targetRows.find((tr: TargetRow) => tr.dept?.includes(d.substring(0, 3)) || tr.dept === d)
     const dTarget = Number(dTargetRow?.target_ton || 3000)
     const dAch = dTarget > 0 ? (dOutput / dTarget) * 100 : 0
 
@@ -115,18 +122,22 @@ export async function getDashboardKPIs(year = 2026, month?: number): Promise<Das
       gasUsedM3: dGas,
     })
 
+    const reheatRatio = dRecords.length > 0
+      ? dRecords.reduce((sum: number, r: ProdRow) => sum + Number(r.work_count || 1), 0) / (dRecords.length * 3)
+      : 1.0
+
     return {
       dept: d,
       outputTon: dOutput,
       targetTon: dTarget,
       achievement: dAch,
       gasUnit: dGasCalc.reportTier || 145.0,
-      reheatRatio: dRecords.length > 0 ? dRecords.reduce((sum: number, r: any) => sum + Number(r.work_count || 1), 0) / (dRecords.length * 3) : 1.0,
+      reheatRatio,
     }
   })
 
   // 마지막 업데이트 시간
-  const lastUpdated = records.length > 0 ? records[0].created_at : new Date().toISOString()
+  const lastUpdated = (records.length > 0 ? records[0].created_at : null) ?? new Date().toISOString()
 
   return {
     totalOutputTon,
@@ -177,7 +188,7 @@ export async function saveManualEntry(data: {
       work_hours: data.workHours,
       work_count: data.workCount,
       gas_used_m3: data.gasUsedM3,
-    } as any)
+    } as never)
 
     if (error) throw new Error(error.message)
 
@@ -185,8 +196,9 @@ export async function saveManualEntry(data: {
     revalidatePath('/data-entry')
 
     return { success: true }
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('saveManualEntry error:', err)
-    return { success: false, error: err?.message || '실적 저장 실패' }
+    const msg = err instanceof Error ? err.message : '실적 저장 실패'
+    return { success: false, error: msg }
   }
 }

@@ -8,7 +8,7 @@ export interface CommitExcelInput {
   fileName: string
   rowCount: number
   mapping: Record<string, string>
-  mappedRows: Array<Record<string, any>>
+  mappedRows: Array<Record<string, unknown>>
 }
 
 export interface CommitExcelResult {
@@ -38,13 +38,14 @@ export async function commitExcelUpload(input: CommitExcelInput): Promise<Commit
         file_name: fileName,
         row_count: rowCount || mappedRows.length,
         status: 'committed',
-        mapping: mapping as any,
+        mapping: mapping as Record<string, string>,
         note: `${fileName} (자동 적재: ${mappedRows.length}행)`,
       } as any)
       .select('id')
       .single()
 
-    const uploadRecord = (uploadRecordRaw || null) as any
+    interface UploadRecord { id: number }
+    const uploadRecord = (uploadRecordRaw || null) as UploadRecord | null
 
     if (uploadErr || !uploadRecord) {
       console.error('Uploads history insert error:', uploadErr)
@@ -75,7 +76,7 @@ export async function commitExcelUpload(input: CommitExcelInput): Promise<Commit
         source_upload_id: uploadId,
       }))
 
-      const { error: insErr } = await supabase.from('production_records').insert(records as any)
+      const { error: insErr } = await supabase.from('production_records').insert(records as never[])
       if (insErr) throw new Error(`생산 실적 적재 실패: ${insErr.message}`)
     } else if (fileType === 'line_output_daily') {
       const records = mappedRows.map((row) => ({
@@ -98,7 +99,7 @@ export async function commitExcelUpload(input: CommitExcelInput): Promise<Commit
         source_upload_id: uploadId,
       }))
 
-      const { error: insErr } = await supabase.from('line_output_daily').insert(records as any)
+      const { error: insErr } = await supabase.from('line_output_daily').insert(records as never[])
       if (insErr) throw new Error(`생산량집계표 적재 실패: ${insErr.message}`)
     } else if (fileType === 'gas_monthly') {
       const records = mappedRows.map((row) => ({
@@ -109,7 +110,7 @@ export async function commitExcelUpload(input: CommitExcelInput): Promise<Commit
         source_upload_id: uploadId,
       }))
 
-      const { error: insErr } = await supabase.from('gas_records').insert(records as any)
+      const { error: insErr } = await supabase.from('gas_records').insert(records as never[])
       if (insErr) throw new Error(`가스 월별 실적 적재 실패: ${insErr.message}`)
     } else if (fileType === 'gas_daily_readings') {
       const records = mappedRows.map((row) => ({
@@ -121,7 +122,7 @@ export async function commitExcelUpload(input: CommitExcelInput): Promise<Commit
         source_upload_id: uploadId,
       }))
 
-      const { error: insErr } = await supabase.from('gas_daily_readings').insert(records as any)
+      const { error: insErr } = await supabase.from('gas_daily_readings').insert(records as never[])
       if (insErr) throw new Error(`가스 일별 검침 적재 실패: ${insErr.message}`)
     } else if (fileType === 'work_standards') {
       const records = mappedRows.map((row) => ({
@@ -136,7 +137,7 @@ export async function commitExcelUpload(input: CommitExcelInput): Promise<Commit
         note: row.note ? String(row.note) : null,
       }))
 
-      const { error: insErr } = await supabase.from('work_standards').insert(records as any)
+      const { error: insErr } = await supabase.from('work_standards').insert(records as never[])
       if (insErr) throw new Error(`표준작업수 마스터 적재 실패: ${insErr.message}`)
     } else if (fileType === 'targets') {
       const records = mappedRows.map((row) => ({
@@ -148,7 +149,7 @@ export async function commitExcelUpload(input: CommitExcelInput): Promise<Commit
         target_defect_rate: Number(row.target_defect_rate || 2.0),
       }))
 
-      const { error: insErr } = await supabase.from('targets').insert(records as any)
+      const { error: insErr } = await supabase.from('targets').insert(records as never[])
       if (insErr) throw new Error(`목표 마스터 적재 실패: ${insErr.message}`)
     } else if (fileType === 'raw_material_specs') {
       const records = mappedRows.map((row) => ({
@@ -159,7 +160,7 @@ export async function commitExcelUpload(input: CommitExcelInput): Promise<Commit
         note: row.note ? String(row.note) : null,
       }))
 
-      const { error: insErr } = await supabase.from('raw_material_specs').insert(records as any)
+      const { error: insErr } = await supabase.from('raw_material_specs').insert(records as never[])
       if (insErr) throw new Error(`원소재 규격 마스터 적재 실패: ${insErr.message}`)
     }
 
@@ -173,9 +174,10 @@ export async function commitExcelUpload(input: CommitExcelInput): Promise<Commit
       uploadId,
       message: `${mappedRows.length}건의 데이터가 성공적으로 적재되었습니다.`,
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('commitExcelUpload error:', err)
-    return { success: false, error: err?.message || 'DB 적재 중 오류가 발생했습니다.' }
+    const msg = err instanceof Error ? err.message : 'DB 적재 중 오류가 발생했습니다.'
+    return { success: false, error: msg }
   }
 }
 

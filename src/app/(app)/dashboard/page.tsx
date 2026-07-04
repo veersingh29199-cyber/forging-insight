@@ -93,7 +93,6 @@ export default function DashboardPage() {
   const [drilldownOpen, setDrilldownOpen] = useState(false)
 
   const fetchKpis = useCallback((year: number) => {
-    setLoading(true)
     getDashboardKPIs(year).then((data) => {
       setKpis(data)
       setLoading(false)
@@ -187,7 +186,10 @@ export default function DashboardPage() {
         <select
           className="filter-select"
           value={filterYear}
-          onChange={e => setFilterYear(Number(e.target.value))}
+          onChange={e => {
+            setLoading(true)
+            setFilterYear(Number(e.target.value))
+          }}
         >
           {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}년</option>)}
         </select>
