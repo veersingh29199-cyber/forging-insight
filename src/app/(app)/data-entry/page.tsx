@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Plus, Trash2, Save, Edit2, Check, X, FileSpreadsheet, AlertCircle, Sparkles } from 'lucide-react'
 import { ChecklistWidget } from '@/components/ChecklistWidget'
+import { saveManualEntry } from '@/app/actions/data-actions'
 
 // ─────────────────────────────────────────
 // 초기 표준작업수 마스터 데이터 (Section 5, 6-1)
@@ -103,10 +104,29 @@ export default function DataEntryPage() {
     setTimeout(() => setSaveSuccess(false), 3000)
   }
 
-  const handleManualSubmit = (e: React.FormEvent) => {
+  const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    alert(`[수기 실적 등록 완료]\n일자: ${manualRecord.date}\n부서: ${manualRecord.dept}\n수주중량: ${manualRecord.orderWeight}t\n가스사용: ${manualRecord.gasUsedM3}m³\n\n💡 실적 원장 및 가스 원단위 분석 엔진에 즉시 반영되었습니다.`)
-    triggerSaveMessage()
+    const res = await saveManualEntry({
+      workDate: manualRecord.date,
+      dept: manualRecord.dept,
+      shift: 'A',
+      orderNo: `ORD-MANUAL-${Date.now()}`,
+      product: '일반단조품',
+      material: 'SCM440',
+      orderWeightTon: manualRecord.orderWeight,
+      chargeWeightTon: manualRecord.chargeWeight,
+      hwangjiWeightTon: manualRecord.hwangjiWeight,
+      furnace: manualRecord.dept.includes('1호기') ? '1호기' : '9호기',
+      workHours: manualRecord.workHours,
+      workCount: manualRecord.workCount,
+      gasUsedM3: manualRecord.gasUsedM3,
+    })
+
+    if (res.success) {
+      triggerSaveMessage()
+    } else {
+      alert(`실적 등록 실패: ${res.error || '알 수 없는 오류'}`)
+    }
   }
 
   return (
@@ -456,9 +476,10 @@ export default function DataEntryPage() {
                 <input
                   type="number"
                   step="0.1"
+                  inputMode="decimal"
                   value={manualRecord.orderWeight}
                   onChange={(e) => setManualRecord({ ...manualRecord, orderWeight: Number(e.target.value) })}
-                  style={{ width: '100%', padding: '0.65rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '6px', color: 'var(--color-text)', fontWeight: 700 }}
+                  style={{ width: '100%', minHeight: '44px', padding: '0.65rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '6px', color: 'var(--color-text)', fontWeight: 700 }}
                   required
                 />
               </div>
@@ -470,9 +491,10 @@ export default function DataEntryPage() {
                 <input
                   type="number"
                   step="0.1"
+                  inputMode="decimal"
                   value={manualRecord.chargeWeight}
                   onChange={(e) => setManualRecord({ ...manualRecord, chargeWeight: Number(e.target.value) })}
-                  style={{ width: '100%', padding: '0.65rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '6px', color: 'var(--color-text)', fontWeight: 700 }}
+                  style={{ width: '100%', minHeight: '44px', padding: '0.65rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '6px', color: 'var(--color-text)', fontWeight: 700 }}
                   required
                 />
               </div>
@@ -496,9 +518,10 @@ export default function DataEntryPage() {
                 </label>
                 <input
                   type="number"
+                  inputMode="decimal"
                   value={manualRecord.gasUsedM3}
                   onChange={(e) => setManualRecord({ ...manualRecord, gasUsedM3: Number(e.target.value) })}
-                  style={{ width: '100%', padding: '0.65rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '6px', color: 'var(--color-success)', fontWeight: 700 }}
+                  style={{ width: '100%', minHeight: '44px', padding: '0.65rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '6px', color: 'var(--color-success)', fontWeight: 700 }}
                   required
                 />
               </div>

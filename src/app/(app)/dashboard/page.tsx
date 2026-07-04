@@ -1,7 +1,10 @@
 'use client'
 
-import { TrendingUp, TrendingDown, Flame, Factory, AlertTriangle, CheckCircle2, RefreshCw, HelpCircle, ArrowRight } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { TrendingUp, TrendingDown, Flame, Factory, AlertTriangle, CheckCircle2, RefreshCw, HelpCircle, ArrowRight, Loader2, Download, Printer } from 'lucide-react'
 import { ChecklistWidget } from '@/components/ChecklistWidget'
+import { getDashboardKPIs, type DashboardKPIs } from '@/app/actions/data-actions'
+import { exportDashboardReportToExcel, printDashboardReport } from '@/lib/export/report'
 
 // ─────────────────────────────────────────
 // 도메인 5대 KPI 카드 데이터 (Section 7-2, 8, 10)
@@ -76,6 +79,84 @@ const DEPT_GAS_DATA = [
 ]
 
 export default function DashboardPage() {
+  const [kpis, setKpis] = useState<DashboardKPIs | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    getDashboardKPIs(2026).then((data) => {
+      setKpis(data)
+      setLoading(false)
+    }).catch((e) => {
+      console.error('getDashboardKPIs error:', e)
+      setLoading(false)
+    })
+  }, [])
+
+  const displayKpis = DASHBOARD_KPIS.map((kpi, idx) => {
+    if (!kpis || kpis.totalOutputTon === 0) return kpi
+    if (idx === 0) {
+      return {
+        ...kpi,
+        value: `${kpis.totalOutputTon.toLocaleString()}t / ${(kpis.totalOutputTon / 64.5).toFixed(1)} t/h`,
+        sub: `목표 ${kpis.targetTon.toLocaleString()}t 대비`,
+      }
+    }
+    if (idx === 1) {
+      return {
+        ...kpi,
+        value: `${kpis.achievementRate.toFixed(1)}%`,
+        sub: `목표 ${kpis.targetTon.toLocaleString()}t 기준`,
+      }
+    }
+    if (idx === 2) {
+      return {
+        ...kpi,
+        value: `${kpis.gas3Tier.reports.toFixed(1)} Mcal/t`,
+        sub: `분석용 ${kpis.gas3Tier.analysis.toFixed(1)} / 실제 ${kpis.gas3Tier.actual.toFixed(1)} Mcal/t`,
+      }
+    }
+    if (idx === 3) {
+      return {
+        ...kpi,
+        value: `${kpis.reheatRatio.toFixed(2)} 배`,
+      }
+    }
+    if (idx === 4) {
+      return {
+        ...kpi,
+        value: `${kpis.defectRate.toFixed(1)}%`,
+        sub: `목표 ≤ 2.0% 기준`,
+      }
+    }
+    return kpi
+  })
+
+  const displayDeptProd = DEPT_PRODUCTION_DATA.map((row) => {
+    if (!kpis) return row
+    const stat = kpis.deptStats.find((s) => s.dept.includes(row.dept.substring(0, 3)) || row.dept.includes(s.dept.substring(0, 3)))
+    if (!stat || stat.outputTon === 0) return row
+    return {
+      ...row,
+      target: stat.targetTon,
+      actual: stat.outputTon,
+      status: stat.achievement >= 95 ? '달성' : stat.achievement >= 85 ? '주의' : '미달',
+    }
+  })
+
+  const displayDeptGas = DEPT_GAS_DATA.map((row) => {
+    if (!kpis) return row
+    const stat = kpis.deptStats.find((s) => s.dept.includes(row.dept.substring(0, 3)) || row.dept.includes(s.dept.substring(0, 3)))
+    if (!stat || stat.outputTon === 0) return row
+    return {
+      ...row,
+      reportTier: stat.gasUnit,
+      analysisTier: stat.gasUnit * 0.96,
+      actualTier: stat.gasUnit * 0.85,
+      dev: Number((stat.gasUnit - row.target).toFixed(1)),
+      status: stat.gasUnit <= row.target ? '우수' : '주의',
+    }
+  })
+
   return (
     <div className="animate-in">
       {/* 헤더 */}
@@ -86,7 +167,25 @@ export default function DashboardPage() {
             태웅 단조공장 · 2026년 실적 집계 (황지 제외 / 3단계 원단위 / 두산 벤치마크 비교)
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          {kpis && (
+            <>
+              <button
+                className="btn btn-outline"
+                onClick={() => exportDashboardReportToExcel(kpis)}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', borderColor: 'var(--color-success)', color: 'var(--color-success)', fontWeight: 700 }}
+              >
+                <Download size={15} /> 엑셀 보고서
+              </button>
+              <button
+                className="btn btn-outline"
+                onClick={printDashboardReport}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700 }}
+              >
+                <Printer size={15} /> 인쇄/PDF
+              </button>
+            </>
+          )}
           <a href="/data-entry" className="btn btn-outline" style={{ textDecoration: 'none' }}>
             ✏️ 목표·기준 수기입력
           </a>
@@ -99,9 +198,36 @@ export default function DashboardPage() {
       {/* Section 7-7 현장 적용 체크리스트 아코디언 위젯 */}
       <ChecklistWidget />
 
+      {/* 이상치 감지 긴급 경고 배너 */}
+      {kpis?.anomalyDetected && (
+        <div
+          className="animate-in"
+          style={{
+            background: 'rgba(239, 68, 68, 0.12)',
+            border: '2px solid var(--color-danger)',
+            borderRadius: 'var(--radius-md)',
+            padding: '1.25rem',
+            marginBottom: '2rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '1rem',
+            color: 'var(--color-danger)',
+            boxShadow: '0 4px 12px rgba(239, 68, 68, 0.15)',
+          }}
+        >
+          <AlertTriangle size={32} className="animate-bounce" />
+          <div>
+            <div style={{ fontSize: '1.05rem', fontWeight: 800, marginBottom: '0.25rem' }}>🚨 [긴급 이상치 감지 알림]</div>
+            <div style={{ fontSize: '0.9rem', color: 'var(--color-text)', fontWeight: 600, lineHeight: 1.5 }}>
+              {kpis.anomalyMessage}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 5대 KPI 카드 그리드 */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem', marginBottom: '2.5rem' }}>
-        {DASHBOARD_KPIS.map((kpi) => {
+        {displayKpis.map((kpi) => {
           const Icon = kpi.icon
           const positive = kpi.trend < 0
             ? kpi.label.includes('원단위') || kpi.label.includes('비가동') || kpi.label.includes('불량') || kpi.label.includes('재가열')
@@ -195,7 +321,7 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {DEPT_PRODUCTION_DATA.map((row) => {
+                {displayDeptProd.map((row) => {
                   const rate = row.target > 0 ? (row.actual / row.target) * 100 : null
                   const achieved = rate ? rate >= 95 : true
                   const isSuperior = row.benchmark ? row.tonPerHour >= row.benchmark : true
@@ -278,7 +404,7 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {DEPT_GAS_DATA.map((row) => {
+                {displayDeptGas.map((row) => {
                   const ok = row.dev <= 5.0
                   const reheatLoss = (row.reportTier - row.actualTier).toFixed(1)
 

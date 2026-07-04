@@ -6,6 +6,7 @@ import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, Loader2, Eye, Downl
 import * as XLSX from 'xlsx'
 import { parseExcelBuffer, getTemplateData } from '@/lib/excel/parser'
 import type { ParseResult, FileFormatType } from '@/lib/excel/parser'
+import { commitExcelUpload } from '@/app/actions/excel-actions'
 
 // ─────────────────────────────────────────
 // 9개 파일 종류 정의 (Section 6-1)
@@ -221,6 +222,7 @@ export default function UploadPage() {
   async function handleCommit() {
     if (!preview) return
     setStep('commit')
+    setError(null)
 
     // 매핑 규칙 기억
     try {
@@ -231,9 +233,36 @@ export default function UploadPage() {
       console.error(e)
     }
 
-    // 모의 DB 저장 시뮬레이션 (source_upload_id 기록)
-    await new Promise((r) => setTimeout(r, 1500))
-    setStep('done')
+    // 파싱된 행 데이터를 매핑 규칙에 따라 객체 배열로 변환
+    const sheet = preview.result.sheets[0]
+    const headers = sheet.headers[sheet.headers.length - 1] || []
+    const mappedRows = sheet.rows.map((row) => {
+      const rawObj: Record<string, any> = {}
+      headers.forEach((h, idx) => {
+        rawObj[h] = row[idx]?.value
+      })
+      const mappedObj: Record<string, any> = {}
+      Object.entries(preview.mapping).forEach(([targetCol, headerName]) => {
+        mappedObj[targetCol] = rawObj[headerName]
+      })
+      return Object.assign({}, rawObj, mappedObj)
+    })
+
+    // 서버 액션 호출하여 실제 Supabase DB 적재
+    const res = await commitExcelUpload({
+      fileType: preview.fileType,
+      fileName: preview.fileName,
+      rowCount: preview.result.summary.extractedRowCount || sheet.rows.length,
+      mapping: preview.mapping,
+      mappedRows,
+    })
+
+    if (res.success) {
+      setStep('done')
+    } else {
+      setError(res.error || 'DB 적재 중 오류가 발생했습니다.')
+      setStep('preview')
+    }
   }
 
   // ─────────────────────────────────────────
