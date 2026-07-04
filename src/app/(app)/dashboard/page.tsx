@@ -1,8 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { TrendingUp, TrendingDown, Flame, Factory, AlertTriangle, CheckCircle2, RefreshCw, HelpCircle, ArrowRight, Loader2, Download, Printer } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { TrendingUp, TrendingDown, Flame, Factory, AlertTriangle, CheckCircle2, RefreshCw, HelpCircle, ArrowRight, Download, Printer, Filter } from 'lucide-react'
 import { ChecklistWidget } from '@/components/ChecklistWidget'
+import { ShopfloorToggle } from '@/components/ShopfloorToggle'
+import { DrilldownModal } from '@/components/DrilldownModal'
 import { getDashboardKPIs, type DashboardKPIs } from '@/app/actions/data-actions'
 import { exportDashboardReportToExcel, printDashboardReport } from '@/lib/export/report'
 
@@ -78,12 +80,21 @@ const DEPT_GAS_DATA = [
   { dept: '열처리 13호기', furnaceGroup: '열처리 대차로 (13호기)', reportTier: 95.0, analysisTier: 95.0, actualTier: 95.0, target: 100.0, dev: -5.0, status: '정상' },
 ]
 
+const DEPT_OPTIONS = ['전체', 'P15 (1단조반)', 'P5 (2단조반)', 'P8 (3단조반)', 'R9 (4단조반)', 'R/M (링밀/자유)', '열처리 13호기']
+const FURNACE_OPTIONS = ['전체', '배치로', '대차로', '열처리']
+const YEAR_OPTIONS = [2024, 2025, 2026]
+
 export default function DashboardPage() {
   const [kpis, setKpis] = useState<DashboardKPIs | null>(null)
   const [loading, setLoading] = useState(true)
+  const [filterDept, setFilterDept] = useState('전체')
+  const [filterFurnace, setFilterFurnace] = useState('전체')
+  const [filterYear, setFilterYear] = useState(2026)
+  const [drilldownOpen, setDrilldownOpen] = useState(false)
 
-  useEffect(() => {
-    getDashboardKPIs(2026).then((data) => {
+  const fetchKpis = useCallback((year: number) => {
+    setLoading(true)
+    getDashboardKPIs(year).then((data) => {
       setKpis(data)
       setLoading(false)
     }).catch((e) => {
@@ -91,6 +102,8 @@ export default function DashboardPage() {
       setLoading(false)
     })
   }, [])
+
+  useEffect(() => { fetchKpis(filterYear) }, [filterYear, fetchKpis])
 
   const displayKpis = DASHBOARD_KPIS.map((kpi, idx) => {
     if (!kpis || kpis.totalOutputTon === 0) return kpi
@@ -157,14 +170,56 @@ export default function DashboardPage() {
     }
   })
 
+  // 필터 적용: 부서 필터링
+  const filteredDeptProd = filterDept === '전체'
+    ? displayDeptProd
+    : displayDeptProd.filter(r => r.dept === filterDept)
+  const filteredDeptGas = filterDept === '전체'
+    ? displayDeptGas
+    : displayDeptGas.filter(r => r.dept === filterDept)
+
   return (
     <div className="animate-in">
+      {/* ── 고정 필터 바 ── */}
+      <div className="sticky-filter-bar">
+        <Filter size={14} style={{ color: 'var(--color-text-dim)', flexShrink: 0 }} />
+        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)', fontWeight: 700 }}>기간</span>
+        <select
+          className="filter-select"
+          value={filterYear}
+          onChange={e => setFilterYear(Number(e.target.value))}
+        >
+          {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}년</option>)}
+        </select>
+        <div className="filter-divider" />
+        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)', fontWeight: 700 }}>부서</span>
+        {DEPT_OPTIONS.map(d => (
+          <button
+            key={d}
+            className={`filter-chip ${filterDept === d ? 'active' : ''}`}
+            onClick={() => setFilterDept(d)}
+          >{d === '전체' ? '전 부서' : d.split(' ')[0]}</button>
+        ))}
+        <div className="filter-divider" />
+        <span style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)', fontWeight: 700 }}>로방식</span>
+        {FURNACE_OPTIONS.map(f => (
+          <button
+            key={f}
+            className={`filter-chip ${filterFurnace === f ? 'active' : ''}`}
+            onClick={() => setFilterFurnace(f)}
+          >{f}</button>
+        ))}
+        <div style={{ marginLeft: 'auto' }}>
+          <ShopfloorToggle />
+        </div>
+      </div>
+
       {/* 헤더 */}
       <div className="section-header">
         <div>
           <h1 className="section-title">생산·가스 원단위 통합 대시보드</h1>
           <div style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-            태웅 단조공장 · 2026년 실적 집계 (황지 제외 / 3단계 원단위 / 두산 벤치마크 비교)
+            태웅 단조공장 · {filterYear}년 실적 집계 (황지 제외 / 3단계 원단위 / 두산 벤치마크 비교)
           </div>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -198,31 +253,85 @@ export default function DashboardPage() {
       {/* Section 7-7 현장 적용 체크리스트 아코디언 위젯 */}
       <ChecklistWidget />
 
-      {/* 이상치 감지 긴급 경고 배너 */}
+      {/* 이상치 감지 긴급 경고 배너 — 클릭 시 드릴다운 모달 오픈 */}
       {kpis?.anomalyDetected && (
-        <div
-          className="animate-in"
-          style={{
-            background: 'rgba(239, 68, 68, 0.12)',
-            border: '2px solid var(--color-danger)',
-            borderRadius: 'var(--radius-md)',
-            padding: '1.25rem',
-            marginBottom: '2rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '1rem',
-            color: 'var(--color-danger)',
-            boxShadow: '0 4px 12px rgba(239, 68, 68, 0.15)',
-          }}
-        >
-          <AlertTriangle size={32} className="animate-bounce" />
-          <div>
-            <div style={{ fontSize: '1.05rem', fontWeight: 800, marginBottom: '0.25rem' }}>🚨 [긴급 이상치 감지 알림]</div>
-            <div style={{ fontSize: '0.9rem', color: 'var(--color-text)', fontWeight: 600, lineHeight: 1.5 }}>
+        <>
+          <div
+            className="animate-in"
+            onClick={() => setDrilldownOpen(true)}
+            style={{
+              background: 'rgba(239, 68, 68, 0.12)',
+              border: '2px solid var(--color-danger)',
+              borderRadius: 'var(--radius-md)',
+              padding: '1.25rem',
+              marginBottom: '2rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '1rem',
+              color: 'var(--color-danger)',
+              boxShadow: '0 4px 12px rgba(239, 68, 68, 0.15)',
+              cursor: 'pointer',
+              transition: 'opacity 0.15s',
+            }}
+          >
+            <AlertTriangle size={32} className="animate-bounce" />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '1.05rem', fontWeight: 800, marginBottom: '0.25rem' }}>🚨 [긴급 이상치 감지 알림]</div>
+              <div style={{ fontSize: '0.9rem', color: 'var(--color-text)', fontWeight: 600, lineHeight: 1.5 }}>
+                {kpis.anomalyMessage}
+              </div>
+            </div>
+            <span style={{ fontSize: '0.78rem', fontWeight: 700, padding: '0.3rem 0.75rem', border: '1px solid var(--color-danger)', borderRadius: '999px', whiteSpace: 'nowrap' }}>
+              상세 분석 →
+            </span>
+          </div>
+
+          {/* 드릴다운 모달 */}
+          <DrilldownModal
+            open={drilldownOpen}
+            onClose={() => setDrilldownOpen(false)}
+            title="🚨 이상치 상세 원인 분석"
+          >
+            <div style={{ fontSize: '0.88rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem', lineHeight: 1.7 }}>
               {kpis.anomalyMessage}
             </div>
-          </div>
-        </div>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>부서</th><th style={{textAlign:'right'}}>실적(t)</th>
+                  <th style={{textAlign:'right'}}>목표(t)</th>
+                  <th style={{textAlign:'right'}}>달성률</th>
+                  <th style={{textAlign:'right'}}>가스원단위</th>
+                  <th>판정</th>
+                </tr>
+              </thead>
+              <tbody>
+                {kpis.deptStats.map(s => {
+                  const rate = s.targetTon > 0 ? (s.outputTon / s.targetTon * 100) : null
+                  const ok = rate ? rate >= 95 : true
+                  const gasOk = s.gasUnit <= 155
+                  return (
+                    <tr key={s.dept}>
+                      <td style={{fontWeight:700}}>{s.dept}</td>
+                      <td style={{textAlign:'right'}}>{s.outputTon.toLocaleString()}</td>
+                      <td style={{textAlign:'right'}}>{s.targetTon.toLocaleString()}</td>
+                      <td style={{textAlign:'right', fontWeight:800, color: ok ? 'var(--color-success)' : 'var(--color-danger)'}}>
+                        {rate ? `${rate.toFixed(1)}%` : '-'}
+                      </td>
+                      <td style={{textAlign:'right', color: gasOk ? 'var(--color-success)' : 'var(--color-danger)', fontWeight:700}}>
+                        {s.gasUnit > 0 ? `${s.gasUnit.toFixed(1)} Mcal/t` : '-'}
+                      </td>
+                      <td><span className={`badge ${ok && gasOk ? 'badge-success' : 'badge-danger'}`}>{ok && gasOk ? '정상' : '이상치'}</span></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            <div style={{ marginTop: '1.25rem', padding: '1rem', background: 'var(--color-surface-2)', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem', color: 'var(--color-text-muted)', lineHeight: 1.7 }}>
+              💡 <strong>권고 조치:</strong> 달성률 미달 부서는 비가동 원인을 확인하고 설정 &gt; 기준값을 검토하십시오. 가스 원단위 초과 시 해당 호기의 재가열 배수(로딩 패턴)를 점검하십시오.
+            </div>
+          </DrilldownModal>
+        </>
       )}
 
       {/* 5대 KPI 카드 그리드 */}
@@ -321,7 +430,7 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {displayDeptProd.map((row) => {
+                {filteredDeptProd.map((row) => {
                   const rate = row.target > 0 ? (row.actual / row.target) * 100 : null
                   const achieved = rate ? rate >= 95 : true
                   const isSuperior = row.benchmark ? row.tonPerHour >= row.benchmark : true
@@ -404,7 +513,7 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {displayDeptGas.map((row) => {
+                {filteredDeptGas.map((row) => {
                   const ok = row.dev <= 5.0
                   const reheatLoss = (row.reportTier - row.actualTier).toFixed(1)
 
