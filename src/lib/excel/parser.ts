@@ -48,6 +48,13 @@ export interface FileDetectionResult {
 
 export type SheetFormat = 'crosstab' | 'long' | 'unknown'
 
+export interface CrosstabBandInfo {
+  band: string
+  colStart: number
+  colEnd: number
+  metrics: string[]
+}
+
 export interface ParsedCell {
   value: string | number | boolean | null
   raw: unknown
@@ -62,6 +69,8 @@ export interface ParsedSheet {
   detection: FileDetectionResult
   weightUnit: 'kg' | 'ton' | 'unknown'
   unitDetectionReason: string
+  headerRowCount: number
+  crosstabBands?: CrosstabBandInfo[]
 }
 
 export interface LongRecord {
@@ -175,12 +184,13 @@ export class ExcelParser {
         detection: { fileType: 'unknown', label: '알 수 없음', confidence: 0, reasons: ['빈 시트'], targetTable: '-' },
         weightUnit: 'unknown',
         unitDetectionReason: '데이터 없음',
+        headerRowCount: 0,
       }
     }
 
-    // 셀 정규화 (5번 오류셀 처리 및 6번 날짜 교정 포함)
-    const normalizedRows: ParsedCell[][] = rawRows.map((row) =>
-      (row as unknown[]).map((cell) => this.normalizeCell(cell, name))
+    // 셀 정규화 (5번 오류셀 처리 및 6번 날짜 교정 포함 - 행/열 인덱스 전달)
+    const normalizedRows: ParsedCell[][] = rawRows.map((row, rIdx) =>
+      (row as unknown[]).map((cell, cIdx) => this.normalizeCell(cell, name, rIdx, cIdx))
     )
 
     // 헤더 끝 행 탐지 (2번 헤더 인식: 1~3행 병합 및 다중행 탐지)
@@ -202,7 +212,7 @@ export class ExcelParser {
     // 4번 단위 정규화 감지
     const { unit, reason } = this.detectSheetWeightUnit(headers, forceUnit)
 
-    return {
+    const parsedSheet: ParsedSheet = {
       name,
       headers,
       rows: dataRows,
@@ -210,18 +220,26 @@ export class ExcelParser {
       detection,
       weightUnit: unit,
       unitDetectionReason: reason,
+      headerRowCount: headerEndIdx,
     }
+
+    if (detectedFormat === 'crosstab') {
+      this.crosstabToLong(parsedSheet) // 동적 라인 밴드 및 검증을 위해 1회 스캔
+    }
+
+    return parsedSheet
   }
 
   // ─────────────────────────────────────────
   // 5) 오류셀 처리 & 6) 날짜 교정
   // ─────────────────────────────────────────
 
-  private normalizeCell(raw: unknown, sheetName: string): ParsedCell {
-    // 5) 오류셀 (#REF!, #DIV/0! 등) → null 처리 후 로그
+  private normalizeCell(raw: unknown, sheetName: string, rIdx?: number, cIdx?: number): ParsedCell {
+    const cellAddr = rIdx !== undefined && cIdx !== undefined ? XLSX.utils.encode_cell({ r: rIdx, c: cIdx }) : '알 수 없음'
+    // 5) 오류셀 (#REF!, #DIV/0! 등) → null 처리 후 좌표 표기 로그
     if (typeof raw === 'string' && EXCEL_ERRORS.has(raw.trim().toUpperCase())) {
       this.errorCellCount++
-      this.warn(`[${sheetName}] 엑셀 수식 오류 셀(${raw})이 감지되어 0(또는 null)으로 정규화되었습니다.`)
+      this.warn(`[${sheetName}] 셀 ${cellAddr}에서 수식 오류 셀(${raw})이 감지되어 0(또는 null)으로 정규화되었습니다.`)
       return { value: 0, raw, isError: true }
     }
     if (raw === null || raw === undefined || raw === '') {
@@ -229,6 +247,10 @@ export class ExcelParser {
     }
     // 날짜 객체
     if (raw instanceof Date) {
+      const year = raw.getFullYear()
+      if (year > new Date().getFullYear() + 1 || year < 2000) {
+        this.warn(`[${sheetName}] 셀 ${cellAddr}에서 유효 범위 밖의 미래/과거 일자(${raw.toISOString().split('T')[0]})가 감지되었습니다.`)
+      }
       return {
         value: raw.toISOString().split('T')[0],
         raw,
@@ -517,17 +539,18 @@ export class ExcelParser {
         .trim()
 
       if (labelCandidate) {
+        const labelLower = labelCandidate.toLowerCase()
         // 라인 밴드 키워드가 포함되면 currentBand 갱신
         if (
-          labelCandidate.includes('ton') ||
-          labelCandidate.includes('r/m') ||
-          labelCandidate.includes('호기') ||
-          labelCandidate.includes('단조') ||
-          labelCandidate.includes('total') ||
-          labelCandidate.includes('p15') ||
-          labelCandidate.includes('p5') ||
-          labelCandidate.includes('r9') ||
-          labelCandidate.includes('r11')
+          labelLower.includes('ton') ||
+          labelLower.includes('r/m') ||
+          labelLower.includes('호기') ||
+          labelLower.includes('단조') ||
+          labelLower.includes('total') ||
+          labelLower.includes('p15') ||
+          labelLower.includes('p5') ||
+          labelLower.includes('r9') ||
+          labelLower.includes('r11')
         ) {
           // 밴드 이름 추출
           const bandMatch = labelCandidate.match(/(15000\s*ton|11000\s*r\/m|8000\s*ton|5000\s*ton|total|\d+호기|\d+단조|p15|p5|r9|r11)/i)
@@ -550,14 +573,35 @@ export class ExcelParser {
       })
     }
 
+    // 동적으로 읽은 라인 밴드 라벨·열 구간 산출 및 Sheet에 기록 (2번 요구사항)
+    const bandMap = new Map<string, { colStart: number; colEnd: number; metrics: string[] }>()
+    for (const def of colDefinitions) {
+      if (!bandMap.has(def.band)) {
+        bandMap.set(def.band, { colStart: def.colIdx, colEnd: def.colIdx, metrics: [] })
+      }
+      const b = bandMap.get(def.band)!
+      b.colEnd = Math.max(b.colEnd, def.colIdx)
+      if (def.metric && !b.metrics.includes(def.metric)) {
+        b.metrics.push(def.metric)
+      }
+    }
+    sheet.crosstabBands = Array.from(bandMap.entries()).map(([band, info]) => ({
+      band,
+      colStart: info.colStart,
+      colEnd: info.colEnd,
+      metrics: info.metrics,
+    }))
+
     const records: LongRecord[] = []
+    const seenKeys = new Set<string>()
 
     for (const row of sheet.rows) {
       const dateVal = row[0]?.value ?? null
       if (!dateVal) continue
 
-      // 일자별, 밴드(라인)별로 레코드 조립
       const bandGroups = new Map<string, LongRecord>()
+      let daySumTon = 0
+      let totalBandTon = null as number | null
 
       for (const colDef of colDefinitions) {
         const rawVal = row[colDef.colIdx]?.value ?? null
@@ -574,6 +618,11 @@ export class ExcelParser {
           numVal = this.normalizeWeightToTon(numVal, 'kg')
         }
 
+        // 7번 음수 검증
+        if (numVal !== null && numVal < 0) {
+          this.warn(`[${sheet.name}] 일자 ${dateVal}, 밴드 [${colDef.band}]의 지표('${colDef.metric}')에서 음수 값(${numVal})이 감지되었습니다.`)
+        }
+
         if (!bandGroups.has(colDef.band)) {
           bandGroups.set(colDef.band, {
             work_date: String(dateVal),
@@ -582,12 +631,40 @@ export class ExcelParser {
         }
 
         const group = bandGroups.get(colDef.band)!
-        // 항목명 표준화 매핑
         const normalizedMetric = this.mapMetricName(colDef.metric)
         group[normalizedMetric] = numVal
+
+        // 7번 미매핑 컬럼 검증
+        if (normalizedMetric === colDef.metric && !['col_', '기본라인', '일자', 'date'].some(k => colDef.metric.toLowerCase().includes(k))) {
+          if (!this.warnings.some(w => w.includes(`미매핑 컬럼 '${colDef.metric}'`))) {
+            this.warn(`[${sheet.name}] 미매핑 컬럼 '${colDef.metric}' 감지됨 (표준 필드로 변환되지 않고 원문 컬럼명 유지)`)
+          }
+        }
+
+        // 합계 불일치 검증을 위한 누적
+        if (normalizedMetric === 'output_ton' && numVal !== null) {
+          if (colDef.band.includes('TOTAL') || colDef.band.includes('합계') || colDef.band.includes('소계')) {
+            totalBandTon = numVal
+          } else {
+            daySumTon += numVal
+          }
+        }
+      }
+
+      // 7번 합계 불일치 경고
+      if (totalBandTon !== null && daySumTon > 0 && Math.abs(totalBandTon - daySumTon) > 0.1) {
+        this.warn(`[${sheet.name}] 일자 ${dateVal}의 생산량 합계 불일치 경고 (개별 밴드 합계: ${daySumTon.toFixed(2)}t vs 표기된 총계: ${totalBandTon.toFixed(2)}t)`)
       }
 
       for (const record of bandGroups.values()) {
+        // 7번 중복 레코드 검증
+        const uniqueKey = `${record.work_date}_${record.line_code}`
+        if (seenKeys.has(uniqueKey)) {
+          this.warn(`[${sheet.name}] 중복 데이터 감지: 일자=${record.work_date}, 라인=${record.line_code}`)
+        } else {
+          seenKeys.add(uniqueKey)
+        }
+
         records.push(record)
         this.extractedRowCount++
       }
