@@ -11,12 +11,16 @@ import {
   Home,
   Factory,
   Edit3,
+  TrendingUp,
+  Sparkles,
 } from 'lucide-react'
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: '대시보드', icon: Home },
   { href: '/analysis/production', label: '생산량 분석', icon: BarChart3 },
   { href: '/analysis/gas', label: '가스 원단위', icon: Flame },
+  { href: '/analysis/whatif', label: 'What-If 시뮬레이터', icon: TrendingUp },
+  { href: '/analysis/ai-report', label: 'AI 자동 보고서', icon: Sparkles },
   { href: '/upload', label: '파일 업로드', icon: Upload },
   { href: '/upload/history', label: '업로드 이력', icon: History },
   { href: '/data-entry', label: '직접 입력 / 편집', icon: Edit3 },
